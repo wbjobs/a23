@@ -53,6 +53,14 @@ echo      cd frontend
 echo      npm install
 echo      npm run dev
 echo.
+echo   设置 MathPix API（可选，用于公式OCR）:
+echo      set MATHPIX_ENABLED=true
+echo      set MATHPIX_APP_ID=your_app_id
+echo      set MATHPIX_APP_KEY=your_app_key
+echo.
+echo   设置 BERTopic（可选，需要安装依赖）:
+echo      set BERTOPIC_ENABLED=true
+echo.
 echo Grobid 请等待约 2 分钟启动完成: http://localhost:8070
 echo.
 echo 停止基础服务: 执行 stop-dev.bat

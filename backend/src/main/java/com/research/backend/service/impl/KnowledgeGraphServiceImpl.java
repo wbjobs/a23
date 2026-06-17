@@ -2,15 +2,21 @@ package com.research.backend.service.impl;
 
 import com.research.backend.neo4j.entity.Author;
 import com.research.backend.neo4j.entity.Dataset;
+import com.research.backend.neo4j.entity.FormulaAnchor;
 import com.research.backend.neo4j.entity.Institution;
 import com.research.backend.neo4j.entity.Keyword;
 import com.research.backend.neo4j.entity.Paper;
+import com.research.backend.neo4j.entity.Reference;
+import com.research.backend.neo4j.entity.Topic;
 import com.research.backend.entity.PdfParseResult;
 import com.research.backend.neo4j.repository.AuthorRepository;
 import com.research.backend.neo4j.repository.DatasetRepository;
+import com.research.backend.neo4j.repository.FormulaAnchorRepository;
 import com.research.backend.neo4j.repository.InstitutionRepository;
 import com.research.backend.neo4j.repository.KeywordRepository;
 import com.research.backend.neo4j.repository.PaperRepository;
+import com.research.backend.neo4j.repository.ReferenceRepository;
+import com.research.backend.neo4j.repository.TopicRepository;
 import com.research.backend.service.KnowledgeGraphService;
 import com.research.backend.service.NlpService;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +34,9 @@ public class KnowledgeGraphServiceImpl implements KnowledgeGraphService {
     private final InstitutionRepository institutionRepository;
     private final KeywordRepository keywordRepository;
     private final DatasetRepository datasetRepository;
+    private final FormulaAnchorRepository formulaAnchorRepository;
+    private final TopicRepository topicRepository;
+    private final ReferenceRepository referenceRepository;
     private final NlpService nlpService;
 
     @Override
@@ -129,7 +138,111 @@ public class KnowledgeGraphServiceImpl implements KnowledgeGraphService {
                 parseResult.getAbstractText(), parseResult.getFullText());
         paper.setMethods(methods);
 
+        List<FormulaAnchor> formulaAnchors = new ArrayList<>();
+        if (parseResult.getFormulaAnchors() != null && !parseResult.getFormulaAnchors().isEmpty()) {
+            for (Map<String, Object> faMap : parseResult.getFormulaAnchors()) {
+                FormulaAnchor fa = new FormulaAnchor();
+                fa.setFormulaNumber(getMapString(faMap, "formulaNumber"));
+                fa.setLatex(getMapString(faMap, "latex"));
+                fa.setPage(getMapInteger(faMap, "page"));
+                fa.setX0(getMapDouble(faMap, "x0"));
+                fa.setY0(getMapDouble(faMap, "y0"));
+                fa.setX1(getMapDouble(faMap, "x1"));
+                fa.setY1(getMapDouble(faMap, "y1"));
+                fa.setContext(getMapString(faMap, "context"));
+                formulaAnchors.add(formulaAnchorRepository.save(fa));
+            }
+        }
+        paper.setFormulaAnchors(formulaAnchors);
+
+        List<Topic> topics = new ArrayList<>();
+        if (parseResult.getTopics() != null && !parseResult.getTopics().isEmpty()) {
+            Set<String> coreTopicNames = new HashSet<>();
+            if (parseResult.getCoreTopics() != null) {
+                for (Map<String, Object> ct : parseResult.getCoreTopics()) {
+                    String name = getMapString(ct, "name");
+                    if (name != null) {
+                        coreTopicNames.add(name.toLowerCase());
+                    }
+                }
+            }
+            for (int i = 0; i < parseResult.getTopics().size(); i++) {
+                Map<String, Object> tMap = parseResult.getTopics().get(i);
+                Topic topic = new Topic();
+                String name = getMapString(tMap, "name");
+                topic.setName(name);
+                Double weight = getMapDouble(tMap, "weight");
+                topic.setWeight(weight != null ? weight : 1.0 - (i * 0.05));
+                topic.setIsCore(name != null && coreTopicNames.contains(name.toLowerCase()));
+                topic.setSource("BERTOPIC");
+                topics.add(topicRepository.save(topic));
+            }
+        }
+        paper.setTopics(topics);
+
+        List<Reference> references = new ArrayList<>();
+        if (parseResult.getCitations() != null && !parseResult.getCitations().isEmpty()) {
+            int size = parseResult.getCitations().size();
+            for (int i = 0; i < size; i++) {
+                Map<String, Object> cMap = parseResult.getCitations().get(i);
+                String title = getMapString(cMap, "title");
+                if (title == null || title.isEmpty()) continue;
+
+                Reference ref = referenceRepository.findByTitle(title)
+                        .orElseGet(() -> {
+                            Reference newRef = new Reference();
+                            newRef.setTitle(title);
+                            return newRef;
+                        });
+                ref.setAuthors(getMapString(cMap, "authors"));
+                ref.setYear(getMapInteger(cMap, "year"));
+                ref.setVenue(getMapString(cMap, "venue"));
+
+                double basePagerank = 1.0 / size;
+                double positionBoost = (size - i) * 0.01;
+                ref.setPagerank(basePagerank + positionBoost);
+
+                references.add(referenceRepository.save(ref));
+            }
+        }
+        paper.setReferences(references);
+
         paperRepository.save(paper);
+    }
+
+    private String getMapString(Map<String, Object> map, String key) {
+        Object val = map.get(key);
+        return val != null ? val.toString() : null;
+    }
+
+    private Integer getMapInteger(Map<String, Object> map, String key) {
+        Object val = map.get(key);
+        if (val instanceof Number) {
+            return ((Number) val).intValue();
+        }
+        if (val instanceof String) {
+            try {
+                return Integer.parseInt((String) val);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private Double getMapDouble(Map<String, Object> map, String key) {
+        Object val = map.get(key);
+        if (val instanceof Number) {
+            return ((Number) val).doubleValue();
+        }
+        if (val instanceof String) {
+            try {
+                return Double.parseDouble((String) val);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
     }
 
     @Override

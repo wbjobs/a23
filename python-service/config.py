@@ -14,3 +14,13 @@ class Config:
     GROBID_TIMEOUT = 60
     
     ALLOWED_EXTENSIONS = {'pdf'}
+    
+    MATHPIX_APP_ID = os.getenv('MATHPIX_APP_ID', '')
+    MATHPIX_APP_KEY = os.getenv('MATHPIX_APP_KEY', '')
+    MATHPIX_ENABLED = os.getenv('MATHPIX_ENABLED', 'false').lower() == 'true'
+    
+    BERTOPIC_ENABLED = os.getenv('BERTOPIC_ENABLED', 'false').lower() == 'true'
+    
+    PAGERANK_ENABLED = os.getenv('PAGERANK_ENABLED', 'true').lower() == 'true'
+    
+    FORMULA_DETECTION_ENABLED = True

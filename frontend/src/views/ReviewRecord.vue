@@ -210,7 +210,11 @@
           </span>
         </el-divider>
         <div class="comment-box">
-          <p>{{ currentReview.comment }}</p>
+          <FormulaAnchorText
+            :text="currentReview.comment"
+            :paper-id="currentReview.paperId"
+            @navigate="handleReviewFormulaNavigate"
+          />
         </div>
 
         <el-divider content-position="left" v-if="currentReview.suggestion">
@@ -219,7 +223,11 @@
           </span>
         </el-divider>
         <div class="comment-box suggestion-box" v-if="currentReview.suggestion">
-          <p>{{ currentReview.suggestion }}</p>
+          <FormulaAnchorText
+            :text="currentReview.suggestion"
+            :paper-id="currentReview.paperId"
+            @navigate="handleReviewFormulaNavigate"
+          />
         </div>
         <el-empty v-else description="暂无具体修改建议" :image-size="60" />
       </div>
@@ -233,11 +241,14 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Search, Refresh, User, EditPen, Clock, View, ChatDotRound, LightBulb } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { getReviewsByPaper, getReviewsByReviewer } from '@/api/review'
+import FormulaAnchorText from '@/components/FormulaAnchorText.vue'
 
 const userStore = useUserStore()
+const router = useRouter()
 
 const loading = ref(false)
 const detailVisible = ref(false)
@@ -437,6 +448,14 @@ function handleReset() {
   searchForm.scoreLevel = ''
   searchForm.dateRange = []
   pagination.currentPage = 1
+}
+
+function handleReviewFormulaNavigate({ number, page, y }) {
+  if (!currentReview.value?.paperId) return
+  router.push({
+    path: `/paper/detail/${currentReview.value.paperId}`,
+    query: { formula: number, page: page ?? '', y: y ?? '' }
+  })
 }
 
 onMounted(() => { loadData() })

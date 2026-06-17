@@ -4,9 +4,11 @@ import com.research.backend.dto.ReviewerRecommendationDto;
 import com.research.backend.neo4j.entity.Keyword;
 import com.research.backend.neo4j.entity.Paper;
 import com.research.backend.neo4j.entity.Reviewer;
+import com.research.backend.neo4j.entity.Topic;
 import com.research.backend.neo4j.repository.KeywordRepository;
 import com.research.backend.neo4j.repository.PaperRepository;
 import com.research.backend.neo4j.repository.ReviewerRepository;
+import com.research.backend.neo4j.repository.TopicRepository;
 import com.research.backend.service.ReviewerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,25 +23,20 @@ public class ReviewerServiceImpl implements ReviewerService {
     private final ReviewerRepository reviewerRepository;
     private final PaperRepository paperRepository;
     private final KeywordRepository keywordRepository;
+    private final TopicRepository topicRepository;
 
     @Override
     public List<ReviewerRecommendationDto> recommendReviewers(Long paperId) {
         Paper paper = paperRepository.findById(paperId)
                 .orElseThrow(() -> new RuntimeException("论文不存在"));
 
-        List<Keyword> paperKeywords = paper.getKeywords() != null && !paper.getKeywords().isEmpty() ?
-                paper.getKeywords() : keywordRepository.findKeywordsByPaperId(paperId);
-
-        Set<String> paperKeywordNames = new HashSet<>();
-        for (Keyword kw : paperKeywords) {
-            paperKeywordNames.add(kw.getName().toLowerCase());
-        }
+        Map<String, Double> paperTopicWeights = getPaperTopicWeights(paperId);
 
         List<Reviewer> allReviewers = reviewerRepository.findAll();
         List<ReviewerRecommendationDto> recommendations = new ArrayList<>();
 
         for (Reviewer reviewer : allReviewers) {
-            double similarity = calculateCosineSimilarity(paperKeywordNames, reviewer);
+            double similarity = calculateWeightedCosineSimilarity(paperTopicWeights, reviewer);
             recommendations.add(new ReviewerRecommendationDto(reviewer, similarity));
         }
 
@@ -50,12 +47,47 @@ public class ReviewerServiceImpl implements ReviewerService {
                 .collect(Collectors.toList());
     }
 
-    private double calculateCosineSimilarity(Set<String> paperKeywords, Reviewer reviewer) {
-        Set<String> reviewerKeywords = new HashSet<>();
+    private Map<String, Double> getPaperTopicWeights(Long paperId) {
+        Map<String, Double> topicWeights = new HashMap<>();
+
+        List<Topic> coreTopics = topicRepository.findCoreTopicsByPaperId(paperId);
+        if (coreTopics != null && !coreTopics.isEmpty()) {
+            for (Topic topic : coreTopics) {
+                double weight = topic.getWeight() != null ? topic.getWeight() : 1.0;
+                topicWeights.put(topic.getName().toLowerCase(), weight * 2.0);
+            }
+        }
+
+        List<Topic> allTopics = topicRepository.findByPaperId(paperId);
+        if (allTopics != null && !allTopics.isEmpty()) {
+            for (Topic topic : allTopics) {
+                String name = topic.getName().toLowerCase();
+                if (!topicWeights.containsKey(name)) {
+                    double weight = topic.getWeight() != null ? topic.getWeight() : 0.5;
+                    topicWeights.put(name, weight);
+                }
+            }
+        }
+
+        if (topicWeights.isEmpty()) {
+            List<Keyword> paperKeywords = keywordRepository.findKeywordsByPaperId(paperId);
+            if (paperKeywords != null && !paperKeywords.isEmpty()) {
+                for (int i = 0; i < paperKeywords.size(); i++) {
+                    double weight = 1.0 - (i * 0.05);
+                    topicWeights.put(paperKeywords.get(i).getName().toLowerCase(), Math.max(weight, 0.3));
+                }
+            }
+        }
+
+        return topicWeights;
+    }
+
+    private double calculateWeightedCosineSimilarity(Map<String, Double> paperTopicWeights, Reviewer reviewer) {
+        Map<String, Double> reviewerKeywordWeights = new HashMap<>();
 
         if (reviewer.getExpertKeywords() != null) {
             for (Keyword kw : reviewer.getExpertKeywords()) {
-                reviewerKeywords.add(kw.getName().toLowerCase());
+                reviewerKeywordWeights.put(kw.getName().toLowerCase(), 1.5);
             }
         }
 
@@ -64,32 +96,22 @@ public class ReviewerServiceImpl implements ReviewerService {
             for (String area : areas) {
                 String trimmed = area.trim().toLowerCase();
                 if (!trimmed.isEmpty()) {
-                    reviewerKeywords.add(trimmed);
+                    reviewerKeywordWeights.put(trimmed, 1.0);
                 }
             }
         }
 
-        Map<String, Integer> paperVector = new HashMap<>();
-        for (String kw : paperKeywords) {
-            paperVector.put(kw, 1);
-        }
-
-        Map<String, Integer> reviewerVector = new HashMap<>();
-        for (String kw : reviewerKeywords) {
-            reviewerVector.put(kw, 1);
-        }
-
         Set<String> allTerms = new HashSet<>();
-        allTerms.addAll(paperVector.keySet());
-        allTerms.addAll(reviewerVector.keySet());
+        allTerms.addAll(paperTopicWeights.keySet());
+        allTerms.addAll(reviewerKeywordWeights.keySet());
 
         double dotProduct = 0.0;
         double normA = 0.0;
         double normB = 0.0;
 
         for (String term : allTerms) {
-            int a = paperVector.getOrDefault(term, 0);
-            int b = reviewerVector.getOrDefault(term, 0);
+            double a = paperTopicWeights.getOrDefault(term, 0.0);
+            double b = reviewerKeywordWeights.getOrDefault(term, 0.0);
             dotProduct += a * b;
             normA += a * a;
             normB += b * b;

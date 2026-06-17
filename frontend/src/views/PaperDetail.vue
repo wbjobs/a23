@@ -93,7 +93,7 @@
               </div>
               <div class="meta-value">
                 <el-tag
-                  v-for="(kw, idx) in (paper.keywords || defaultKeywords).slice(0, 8)"
+                  v-for="(kw, idx) in optimizedKeywords.slice(0, 8)"
                   :key="idx"
                   size="small"
                   type="info"
@@ -307,6 +307,17 @@
                 </span>
               </template>
               <div class="graph-container">
+                <div class="graph-section core-topics-section">
+                  <h4 class="graph-section-title">
+                    <el-icon color="#f57c00"><Star /></el-icon>
+                    核心主题
+                    <el-tag type="warning" size="small" effect="dark" class="core-tag">核心</el-tag>
+                  </h4>
+                  <div class="core-topics-content">
+                    <TopicCloud :topics="coreTopics" :max-tags="15" />
+                  </div>
+                </div>
+                <el-divider />
                 <div class="graph-section">
                   <h4 class="graph-section-title">
                     <el-icon color="#667eea"><CollectionTag /></el-icon>
@@ -314,7 +325,7 @@
                   </h4>
                   <div class="node-list">
                     <span
-                      v-for="(kw, idx) in (paper.keywords || defaultKeywords).slice(0, 6)"
+                      v-for="(kw, idx) in optimizedKeywords.slice(0, 6)"
                       :key="idx"
                       class="node-item keyword-node"
                     >
@@ -389,6 +400,36 @@
                     <span class="legend-dot institution-dot"></span>
                     <span>机构</span>
                   </div>
+                </div>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="引用网络" name="citation">
+              <template #label>
+                <span class="tab-label">
+                  <el-icon><Connection /></el-icon>
+                  引用网络
+                </span>
+              </template>
+              <div class="citation-container">
+                <div class="citation-section">
+                  <h4 class="citation-section-title">
+                    <el-icon color="#667eea"><Share /></el-icon>
+                    引用关系图
+                  </h4>
+                  <CitationGraph
+                    :network="citationNetwork"
+                    :paper-title="paper?.title"
+                    height="360px"
+                  />
+                </div>
+                <el-divider />
+                <div class="citation-section">
+                  <h4 class="citation-section-title">
+                    <el-icon color="#f57c00"><Medal /></el-icon>
+                    核心参考文献 (PageRank)
+                  </h4>
+                  <CoreReferences :references="coreReferences" />
                 </div>
               </div>
             </el-tab-pane>
@@ -485,13 +526,20 @@ import {
   CollectionTag,
   Connection,
   Folder,
-  CopyDocument
+  CopyDocument,
+  Star,
+  Medal
 } from '@element-plus/icons-vue'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { getPaperById } from '@/api/paper'
 import { recommendReviewers, assignReviewers } from '@/api/review'
 import { useUserStore } from '@/store/user'
+import TopicCloud from '@/components/TopicCloud.vue'
+import CitationGraph from '@/components/CitationGraph.vue'
+import CoreReferences from '@/components/CoreReferences.vue'
+import { getCoreTopics, getOptimizedKeywords } from '@/api/topic'
+import { getCitationNetwork, getCoreReferences } from '@/api/citation'
 
 const route = useRoute()
 const router = useRouter()
@@ -508,11 +556,61 @@ const recommendLoading = ref(false)
 const assignLoading = ref(false)
 const recommendList = ref([])
 const selectedReviewers = ref([])
+const coreTopics = ref([])
+const optimizedKeywordsList = ref([])
+const citationNetwork = ref({ nodes: [], edges: [], pagerankScores: {} })
+const coreReferences = ref([])
 
 const paperId = computed(() => route.params.id)
 
+const defaultCitationNetwork = {
+  nodes: [
+    { id: '0', title: '当前论文', isCenter: true },
+    { id: '1', title: 'Deep Residual Learning for Image Recognition' },
+    { id: '2', title: 'Attention Is All You Need' },
+    { id: '3', title: 'Very Deep Convolutional Networks for Large-Scale Image Recognition' },
+    { id: '4', title: 'ImageNet Classification with Deep Convolutional Neural Networks' },
+    { id: '5', title: 'Squeeze-and-Excitation Networks' },
+    { id: '6', title: 'CBAM: Convolutional Block Attention Module' },
+    { id: '7', title: 'EfficientNet: Rethinking Model Scaling for CNNs' }
+  ],
+  edges: [
+    { source: '0', target: '1' },
+    { source: '0', target: '2' },
+    { source: '0', target: '3' },
+    { source: '0', target: '4' },
+    { source: '0', target: '5' },
+    { source: '0', target: '6' },
+    { source: '0', target: '7' }
+  ],
+  pagerankScores: { '0': 1.0, '1': 0.85, '2': 0.78, '3': 0.65, '4': 0.72, '5': 0.55, '6': 0.48, '7': 0.42 }
+}
+
+const defaultCoreReferences = [
+  { title: 'Deep Residual Learning for Image Recognition', authors: 'He et al.', year: 2016, venue: 'CVPR', pagerank: 0.085 },
+  { title: 'Attention Is All You Need', authors: 'Vaswani et al.', year: 2017, venue: 'NeurIPS', pagerank: 0.078 },
+  { title: 'ImageNet Classification with Deep Convolutional Neural Networks', authors: 'Krizhevsky et al.', year: 2012, venue: 'NeurIPS', pagerank: 0.072 },
+  { title: 'Very Deep Convolutional Networks for Large-Scale Image Recognition', authors: 'Simonyan et al.', year: 2015, venue: 'ICLR', pagerank: 0.065 },
+  { title: 'Squeeze-and-Excitation Networks', authors: 'Hu et al.', year: 2018, venue: 'CVPR', pagerank: 0.055 }
+]
+
 const defaultAuthorsList = ['张三', '李四', '王五', '赵六']
 const defaultKeywords = ['深度学习', '图像识别', '卷积神经网络', '注意力机制', '特征提取']
+
+const defaultCoreTopics = [
+  { name: '深度学习', weight: 0.95, isCore: true, source: 'combined' },
+  { name: '卷积神经网络', weight: 0.88, isCore: true, source: 'combined' },
+  { name: '图像识别', weight: 0.82, isCore: true, source: 'bertopic' },
+  { name: '注意力机制', weight: 0.76, isCore: false, source: 'pagerank' },
+  { name: '特征提取', weight: 0.68, isCore: false, source: 'bertopic' },
+  { name: '多尺度融合', weight: 0.62, isCore: false, source: 'pagerank' },
+  { name: '计算机视觉', weight: 0.55, isCore: false, source: 'bertopic' }
+]
+
+const defaultOptimizedKeywords = [
+  '深度学习', '卷积神经网络', '图像识别', '注意力机制',
+  '特征提取', '多尺度特征融合', '计算机视觉', '模式识别'
+]
 const defaultDatasets = ['ImageNet', 'CIFAR-100', 'COCO']
 const defaultAbstract = '本文研究了深度学习在图像识别领域的应用，提出了一种新的卷积神经网络结构。通过在网络设计中引入多尺度特征融合机制和通道注意力机制，有效地提升了网络对细粒度特征的捕捉能力。在多个公开数据集上的实验结果表明，本文方法在准确率和推理速度上均优于现有SOTA方法。'
 const defaultReferences = [
@@ -549,6 +647,12 @@ const defaultReviewers = [
 
 const figures = computed(() => paper.value?.figures || defaultFigures)
 const formulas = computed(() => paper.value?.formulas || defaultFormulas)
+
+const optimizedKeywords = computed(() => {
+  return optimizedKeywordsList.value.length 
+    ? optimizedKeywordsList.value 
+    : (paper.value?.optimizedKeywords || defaultOptimizedKeywords)
+})
 
 const statusText = computed(() => {
   const map = { pending: '待评审', reviewing: '评审中', accepted: '已录用', rejected: '已拒稿', published: '已发表' }
@@ -674,6 +778,71 @@ async function loadRecommenders() {
   }
 }
 
+async function loadCoreTopics() {
+  try {
+    const res = await getCoreTopics(paperId.value)
+    const data = res.data || res
+    if (Array.isArray(data) && data.length) {
+      coreTopics.value = data
+    } else if (data.list && Array.isArray(data.list)) {
+      coreTopics.value = data.list
+    } else {
+      coreTopics.value = defaultCoreTopics
+    }
+  } catch (e) {
+    console.error('加载核心主题失败', e)
+    coreTopics.value = defaultCoreTopics
+  }
+}
+
+async function loadOptimizedKeywords() {
+  try {
+    const res = await getOptimizedKeywords(paperId.value)
+    const data = res.data || res
+    if (Array.isArray(data) && data.length) {
+      optimizedKeywordsList.value = data
+    } else if (data.list && Array.isArray(data.list)) {
+      optimizedKeywordsList.value = data.list
+    } else if (data.keywords && Array.isArray(data.keywords)) {
+      optimizedKeywordsList.value = data.keywords
+    }
+  } catch (e) {
+    console.error('加载优化关键词失败', e)
+  }
+}
+
+async function loadCitationNetwork() {
+  try {
+    const res = await getCitationNetwork(paperId.value)
+    const data = res.data || res
+    if (data?.nodes?.length) {
+      citationNetwork.value = data
+    } else {
+      citationNetwork.value = defaultCitationNetwork
+    }
+  } catch (e) {
+    console.error('加载引用网络失败', e)
+    citationNetwork.value = defaultCitationNetwork
+  }
+}
+
+async function loadCoreReferences() {
+  try {
+    const res = await getCoreReferences(paperId.value, 5)
+    const data = res.data || res
+    if (Array.isArray(data) && data.length) {
+      coreReferences.value = data
+    } else if (data?.list?.length) {
+      coreReferences.value = data.list
+    } else {
+      coreReferences.value = defaultCoreReferences
+    }
+  } catch (e) {
+    console.error('加载核心参考文献失败', e)
+    coreReferences.value = defaultCoreReferences
+  }
+}
+
 function toggleReviewer(id) {
   const idx = selectedReviewers.value.indexOf(id)
   if (idx > -1) {
@@ -704,8 +873,35 @@ async function handleAssign() {
 
 onMounted(async () => {
   await loadPaper()
+  await Promise.all([
+    loadCoreTopics(),
+    loadOptimizedKeywords(),
+    loadCitationNetwork(),
+    loadCoreReferences()
+  ])
   if (recommendVisible.value) {
     await loadRecommenders()
+  }
+
+  const queryFormula = route.query.formula
+  const queryPage = route.query.page
+  const queryY = route.query.y
+  if (queryFormula) {
+    setTimeout(() => {
+      const iframe = document.querySelector('.pdf-iframe')
+      if (iframe && queryPage) {
+        let baseUrl = pdfUrl.value || iframe.src.split('#')[0]
+        if (!baseUrl) {
+          ElMessage.info(`跳转到公式 ${queryFormula}（第${queryPage}页）`)
+          return
+        }
+        const yParam = queryY ? `&view=FitH,${queryY}` : ''
+        iframe.src = `${baseUrl}#page=${queryPage}${yParam}&toolbar=1`
+        ElMessage.success(`跳转到公式 ${queryFormula}`)
+      } else {
+        ElMessage.info(`跳转到公式 ${queryFormula}`)
+      }
+    }, 1000)
   }
 })
 </script>
@@ -1353,5 +1549,35 @@ onMounted(async () => {
 :deep(.detail-tabs .el-tab-pane) {
   height: 100%;
   overflow: auto;
+}
+
+.core-topics-section .graph-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.core-tag {
+  margin-left: 4px;
+}
+
+.core-topics-content {
+  margin-top: 8px;
+}
+
+.citation-container {
+  padding: 4px 0;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+.citation-section { margin-bottom: 8px; }
+.citation-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 </style>

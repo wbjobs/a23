@@ -31,4 +31,13 @@ public class Paper {
 
     @Relationship(type = "USES_DATASET", direction = Relationship.Direction.OUTGOING)
     private List<Dataset> datasets;
+
+    @Relationship(type = "HAS_FORMULA", direction = Relationship.Direction.OUTGOING)
+    private List<FormulaAnchor> formulaAnchors;
+
+    @Relationship(type = "HAS_TOPIC", direction = Relationship.Direction.OUTGOING)
+    private List<Topic> topics;
+
+    @Relationship(type = "CITES", direction = Relationship.Direction.OUTGOING)
+    private List<Reference> references;
 }

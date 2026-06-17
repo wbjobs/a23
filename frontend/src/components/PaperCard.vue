@@ -38,6 +38,21 @@
         </span>
       </div>
 
+      <div v-if="coreTopics && coreTopics.length" class="paper-core-topics">
+        <span class="core-label">核心主题：</span>
+        <el-tag
+          v-for="(topic, index) in coreTopics.slice(0, 3)"
+          :key="topic.name || index"
+          size="small"
+          type="warning"
+          effect="light"
+          class="core-topic-tag"
+        >
+          <el-icon><Star /></el-icon>
+          {{ topic.name }}
+        </el-tag>
+      </div>
+
       <div class="card-actions" @click.stop>
         <el-button
           type="primary"
@@ -56,7 +71,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, Calendar, View } from '@element-plus/icons-vue'
+import { User, Calendar, View, Star } from '@element-plus/icons-vue'
 
 const props = defineProps({
   paper: {
@@ -67,6 +82,16 @@ const props = defineProps({
 })
 
 const router = useRouter()
+
+const coreTopics = computed(() => {
+  if (props.paper.coreTopics && Array.isArray(props.paper.coreTopics)) {
+    return props.paper.coreTopics
+  }
+  if (props.paper.topics && Array.isArray(props.paper.topics)) {
+    return props.paper.topics.filter(t => t.isCore).slice(0, 3)
+  }
+  return []
+})
 
 const statusText = computed(() => {
   const map = {
@@ -188,6 +213,30 @@ function handleClick() {
   font-size: 12px;
   color: var(--color-text-placeholder);
   align-self: center;
+}
+
+.paper-core-topics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.core-label {
+  font-size: 12px;
+  color: var(--color-text-regular);
+  font-weight: 500;
+}
+
+.core-topic-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.core-topic-tag .el-icon {
+  font-size: 10px;
 }
 
 .card-actions {

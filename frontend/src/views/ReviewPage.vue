@@ -128,22 +128,49 @@
             <template #header>
               <div class="card-header">
                 <span class="card-title"><el-icon><Operation /></el-icon> 公式列表（LaTeX）</span>
-                <el-tag type="info" size="small">{{ formulas.length }} 个</el-tag>
+                <el-tag type="info" size="small">{{ filteredFormulas.length }} 个</el-tag>
               </div>
             </template>
+            <div class="formula-search-box">
+              <el-input
+                v-model="formulaSearchKeyword"
+                placeholder="按编号搜索公式..."
+                size="small"
+                clearable
+                :prefix-icon="Search"
+              />
+            </div>
             <div class="formulas-list">
-              <div v-for="(fm, idx) in formulas" :key="idx" class="formula-item">
+              <div
+                v-for="(fm, idx) in filteredFormulas"
+                :key="fm.id || idx"
+                class="formula-item"
+                @click="scrollToFormula(fm.page, fm.y)"
+              >
                 <div class="formula-header">
-                  <span class="formula-num">式 ({{ idx + 1 }})</span>
-                  <el-button
-                    size="small"
-                    :icon="CopyDocument"
-                    text
-                    type="primary"
-                    @click="copyFormula(fm.latex, idx)"
-                  >
-                    {{ copiedIdx === idx ? '已复制' : '复制' }}
-                  </el-button>
+                  <span class="formula-num">
+                    公式 {{ fm.number || (fm.index || idx + 1) }}
+                  </span>
+                  <div class="formula-actions">
+                    <el-tooltip content="跳转到对应位置" placement="top">
+                      <el-button
+                        size="small"
+                        :icon="Position"
+                        text
+                        type="primary"
+                        @click.stop="scrollToFormula(fm.page, fm.y)"
+                      />
+                    </el-tooltip>
+                    <el-button
+                      size="small"
+                      :icon="CopyDocument"
+                      text
+                      type="primary"
+                      @click.stop="copyFormula(fm.latex, fm.id || idx)"
+                    >
+                      {{ copiedIdx === (fm.id || idx) ? '已复制' : '复制' }}
+                    </el-button>
+                  </div>
                 </div>
                 <div class="formula-render" v-html="renderFormula(fm.latex)"></div>
                 <div class="formula-source">
@@ -151,7 +178,7 @@
                 </div>
               </div>
             </div>
-            <div v-if="!formulas.length" class="empty-placeholder">
+            <div v-if="!filteredFormulas.length" class="empty-placeholder">
               <el-empty description="暂无公式" :image-size="60" />
             </div>
           </el-card>
@@ -261,6 +288,22 @@
                 />
               </el-form-item>
 
+              <el-form-item label="意见预览" v-if="reviewForm.comment">
+                <div class="comment-preview-box">
+                  <div class="preview-label">
+                    <el-icon><View /></el-icon>
+                    评审意见预览（公式可点击跳转）
+                  </div>
+                  <div class="preview-content">
+                    <FormulaAnchorText
+                      :text="reviewForm.comment"
+                      :paper-id="paperId"
+                      @navigate="handleFormulaNavigate"
+                    />
+                  </div>
+                </div>
+              </el-form-item>
+
               <el-form-item>
                 <el-button
                   type="primary"
@@ -301,18 +344,21 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   User, Calendar, Document, OfficeBuilding, Files, Reading,
   ZoomIn, ZoomOut, RefreshRight, Download, Picture, Operation,
-  EditPen, Check, DocumentAdd, Delete, CopyDocument
+  EditPen, Check, DocumentAdd, Delete, CopyDocument, Search,
+  Position, View
 } from '@element-plus/icons-vue'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { getPaperById } from '@/api/paper'
 import { submitReview } from '@/api/review'
+import FormulaAnchorText from '@/components/FormulaAnchorText.vue'
+import { getFormulaList } from '@/api/formula'
 
 const route = useRoute()
 const router = useRouter()
@@ -323,9 +369,22 @@ const reviewFormRef = ref(null)
 const pdfScale = ref(1)
 const isSubmitted = ref(false)
 const copiedIdx = ref(-1)
+const formulaSearchKeyword = ref('')
+const formulaList = ref([])
 
 const paperId = computed(() => route.params.paperId)
 const pdfUrl = computed(() => paper.value?.fileUrl || paper.value?.pdfUrl || '')
+
+const filteredFormulas = computed(() => {
+  const list = formulaList.value.length ? formulaList.value : formulas.value
+  if (!formulaSearchKeyword.value) return list
+  const kw = formulaSearchKeyword.value.toLowerCase()
+  return list.filter(fm => {
+    const num = String(fm.number || fm.index || '').toLowerCase()
+    const latex = (fm.latex || '').toLowerCase()
+    return num.includes(kw) || latex.includes(kw)
+  })
+})
 
 const sliderMarks = { 0: '0', 25: '25', 50: '50', 75: '75', 100: '100' }
 
@@ -368,11 +427,11 @@ const figures = computed(() => {
 const formulas = computed(() => {
   if (!paper.value) return []
   const defaultFms = [
-    { latex: 'L(\\theta) = -\\frac{1}{N}\\sum_{i=1}^{N}\\sum_{c=1}^{C}y_{i,c}\\log(p_{i,c})' },
-    { latex: '\\text{Attention}(Q,K,V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V' },
-    { latex: 'F1 = 2 \\times \\frac{\\text{Precision} \\times \\text{Recall}}{\\text{Precision} + \\text{Recall}}' },
-    { latex: 'h_t = \\sigma(W_{hh}h_{t-1} + W_{xh}x_t + b_h)' },
-    { latex: '\\hat{y} = \\arg\\max_{k} P(y=k|x;\\theta)' }
+    { id: 1, number: '3.1', latex: 'L(\\theta) = -\\frac{1}{N}\\sum_{i=1}^{N}\\sum_{c=1}^{C}y_{i,c}\\log(p_{i,c})', page: 3, y: 450 },
+    { id: 2, number: '3.2', latex: '\\text{Attention}(Q,K,V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V', page: 4, y: 200 },
+    { id: 3, number: '4.1', latex: 'F1 = 2 \\times \\frac{\\text{Precision} \\times \\text{Recall}}{\\text{Precision} + \\text{Recall}}', page: 5, y: 320 },
+    { id: 4, number: '4.2', latex: 'h_t = \\sigma(W_{hh}h_{t-1} + W_{xh}x_t + b_h)', page: 5, y: 580 },
+    { id: 5, number: '5.1', latex: '\\hat{y} = \\arg\\max_{k} P(y=k|x;\\theta)', page: 6, y: 150 }
   ]
   return paper.value.formulas?.length ? paper.value.formulas : defaultFms
 })
@@ -400,6 +459,50 @@ function zoomIn() { pdfScale.value = Math.min(pdfScale.value + 0.1, 2) }
 function zoomOut() { pdfScale.value = Math.max(pdfScale.value - 0.1, 0.5) }
 function resetZoom() { pdfScale.value = 1 }
 function handleDownload() { ElMessage.info('PDF 下载中...') }
+
+function scrollToFormula(page, y) {
+  if (!pdfUrl.value) {
+    ElMessage.warning('当前无 PDF 文件，无法跳转')
+    return
+  }
+  if (page === undefined || page === null) {
+    ElMessage.warning('未找到公式页码信息')
+    return
+  }
+  
+  const iframe = document.querySelector('.pdf-iframe')
+  if (iframe) {
+    let baseUrl = pdfUrl.value
+    if (baseUrl.includes('#')) {
+      baseUrl = baseUrl.split('#')[0]
+    }
+    const yParam = y !== undefined && y !== null ? `&view=FitH,${Math.round(y)}` : ''
+    iframe.src = `${baseUrl}#page=${page}${yParam}&toolbar=1&navpanes=1`
+  }
+}
+
+function handleFormulaNavigate({ number, page, y }) {
+  if (page !== null && page !== undefined) {
+    scrollToFormula(page, y)
+    ElMessage.success(`跳转到公式 ${number}`)
+  } else {
+    ElMessage.info(`公式 ${number} - 暂未获取到位置信息`)
+  }
+}
+
+async function loadFormulas() {
+  try {
+    const res = await getFormulaList(paperId.value)
+    const data = res.data || res
+    if (Array.isArray(data) && data.length) {
+      formulaList.value = data
+    } else if (data.list && Array.isArray(data.list)) {
+      formulaList.value = data.list
+    }
+  } catch (e) {
+    console.error('加载公式列表失败', e)
+  }
+}
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
@@ -514,6 +617,7 @@ function handleReset() {
 onMounted(() => {
   loadPaper()
   loadDraft()
+  loadFormulas()
 })
 </script>
 
@@ -794,4 +898,51 @@ onMounted(() => {
 .submit-btn { min-width: 140px; }
 
 :deep(.review-form .el-form-item__label) { font-weight: 600; }
+
+.formula-search-box {
+  margin-bottom: 12px;
+}
+
+.formulas-list .formula-item {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.formulas-list .formula-item:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.formula-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.comment-preview-box {
+  background: var(--color-bg-secondary);
+  border-radius: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-light);
+}
+
+.preview-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-regular);
+  margin-bottom: 8px;
+}
+
+.preview-content {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--color-text-primary);
+  background: #fff;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px dashed var(--color-border-light);
+}
 </style>

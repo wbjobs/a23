@@ -3,11 +3,19 @@ import uuid
 from flask import Blueprint, request, jsonify, current_app
 from app.pdf.grobid_client import GrobidClient
 from app.pdf.pdfplumber_extractor import PdfPlumberExtractor
+from app.pdf.mathpix_client import MathpixClient
+from app.pdf.formula_anchor import detect_formula_anchors
+from app.pdf.topic_modeler import TopicModeler
+from app.pdf.citation_network import CitationNetwork
+from config import Config
 
 parse_bp = Blueprint('parse', __name__, url_prefix='/api')
 
 grobid_client = GrobidClient()
 pdfplumber_extractor = PdfPlumberExtractor()
+mathpix_client = MathpixClient()
+topic_modeler = TopicModeler()
+citation_network = CitationNetwork()
 
 
 def allowed_file(filename):
@@ -186,6 +194,46 @@ def parse_pdf():
         figures = merge_figures(grobid_figures, pdf_images)
         tables = merge_tables(grobid_tables, pdf_tables)
         
+        formula_anchors = []
+        try:
+            if hasattr(Config, 'FORMULA_DETECTION_ENABLED') and Config.FORMULA_DETECTION_ENABLED:
+                formula_anchors = detect_formula_anchors(pdf_path, pdf_formulas)
+        except Exception:
+            formula_anchors = []
+        
+        topics = []
+        try:
+            if hasattr(Config, 'BERTOPIC_ENABLED'):
+                bertopic_enabled = Config.BERTOPIC_ENABLED
+            else:
+                bertopic_enabled = os.getenv('BERTOPIC_ENABLED', 'false').lower() == 'true'
+            
+            if full_text and len(full_text.strip()) > 100:
+                topics = topic_modeler.extract_topics_from_text(full_text, num_topics=5)
+        except Exception:
+            topics = []
+        
+        citation_net = {'nodes': [], 'edges': []}
+        pagerank_scores = {}
+        core_references = []
+        core_topics = []
+        
+        try:
+            pagerank_enabled = True
+            if hasattr(Config, 'PAGERANK_ENABLED'):
+                pagerank_enabled = Config.PAGERANK_ENABLED
+            
+            if pagerank_enabled and citations:
+                citation_net = citation_network.build_network(citations, title)
+                pagerank_scores = citation_network.compute_pagerank(citation_net)
+                core_references = citation_network.get_core_references(citations, title, top_k=5)
+                core_topics = citation_network.extract_core_topics(citations, full_text, num_topics=3)
+        except Exception:
+            citation_net = {'nodes': [], 'edges': []}
+            pagerank_scores = {}
+            core_references = []
+            core_topics = []
+        
         result = {
             'success': True,
             'title': title,
@@ -199,7 +247,13 @@ def parse_pdf():
             'formulas': pdf_formulas,
             'full_text': full_text,
             'references': citations,
-            'grobid_available': grobid_result is not None
+            'grobid_available': grobid_result is not None,
+            'formula_anchors': formula_anchors,
+            'topics': topics,
+            'core_topics': core_topics,
+            'citation_network': citation_net,
+            'pagerank_scores': pagerank_scores,
+            'core_references': core_references
         }
         
         try:
