@@ -49,6 +49,26 @@
           </el-menu-item>
         </el-sub-menu>
 
+        <el-sub-menu v-if="userStore.isAdmin" index="system">
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span>系统管理</span>
+          </template>
+          <el-menu-item index="/blind-review/config">
+            <el-icon><View /></el-icon>
+            <template #title>双盲设置</template>
+          </el-menu-item>
+          <el-menu-item index="/quality/dashboard">
+            <el-icon><DataAnalysis /></el-icon>
+            <template #title>质量监控</template>
+          </el-menu-item>
+        </el-sub-menu>
+
+        <el-menu-item v-if="userStore.isReviewer && !userStore.isAdmin" index="/quality/dashboard">
+          <el-icon><DataAnalysis /></el-icon>
+          <template #title>我的评审质量</template>
+        </el-menu-item>
+
         <el-menu-item index="/profile">
           <el-icon><User /></el-icon>
           <template #title>个人中心</template>
@@ -70,7 +90,10 @@ import {
   EditPen,
   Clock,
   Tickets,
-  User
+  User,
+  View,
+  DataAnalysis,
+  Setting
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import mitt from 'mitt'

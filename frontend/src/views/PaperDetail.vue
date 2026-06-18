@@ -6,6 +6,15 @@
           <span>论文详情</span>
           <div class="header-actions">
             <el-button
+              v-if="showDuplicateCheckBtn"
+              type="danger"
+              :icon="WarningFilled"
+              size="small"
+              @click="$router.push(`/paper/${paperId}/duplicate-check`)"
+            >
+              学术不端检测
+            </el-button>
+            <el-button
               v-if="showRecommendBtn"
               type="warning"
               :icon="UserFilled"
@@ -528,7 +537,8 @@ import {
   Folder,
   CopyDocument,
   Star,
-  Medal
+  Medal,
+  WarningFilled
 } from '@element-plus/icons-vue'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
@@ -666,6 +676,7 @@ const statusType = computed(() => {
 
 const showRecommendBtn = computed(() => userStore.isAdmin && paper.value?.status === 'pending')
 const showReviewBtn = computed(() => (userStore.isReviewer || userStore.isAdmin) && (paper.value?.status === 'pending' || paper.value?.status === 'reviewing'))
+const showDuplicateCheckBtn = computed(() => (userStore.isAuthor || userStore.isAdmin) && paper.value)
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'

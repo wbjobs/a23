@@ -62,6 +62,30 @@ const routes = [
     meta: { requiresAuth: true, title: '评审记录' }
   },
   {
+    path: '/paper/:id/duplicate-check',
+    name: 'DuplicateCheck',
+    component: () => import('@/views/DuplicateCheck.vue'),
+    meta: { requiresAuth: true, roles: ['author', 'admin'], title: '学术不端检测' }
+  },
+  {
+    path: '/blind-review/config',
+    name: 'BlindReviewConfig',
+    component: () => import('@/views/BlindReviewConfig.vue'),
+    meta: { requiresAuth: true, roles: ['admin'], title: '双盲评审设置' }
+  },
+  {
+    path: '/review/:reviewRecordId/reply',
+    name: 'ReviewReply',
+    component: () => import('@/views/ReviewReply.vue'),
+    meta: { requiresAuth: true, title: '评审回复' }
+  },
+  {
+    path: '/quality/dashboard',
+    name: 'QualityDashboard',
+    component: () => import('@/views/QualityDashboard.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'reviewer'], title: '评审质量监控' }
+  },
+  {
     path: '/profile',
     name: 'Profile',
     component: () => import('@/views/Profile.vue'),

@@ -81,6 +81,35 @@ public class EmailServiceImpl implements EmailService {
                 "</div></body></html>";
     }
 
+    @Override
+    @Async
+    public void sendReplyNotification(String reviewerEmail, String reviewerName, Paper paper, String authorName, String replyContent) {
+        String subject = "论文回复通知 - " + paper.getTitle();
+        String content = buildReplyNotificationHtml(reviewerName, paper, authorName, replyContent);
+        sendEmail(reviewerEmail, subject, content);
+    }
+
+    private String buildReplyNotificationHtml(String reviewerName, Paper paper, String authorName, String replyContent) {
+        return "<!DOCTYPE html>" +
+                "<html><head><meta charset='UTF-8'><title>回复通知</title></head>" +
+                "<body style='font-family: Arial, sans-serif; padding: 20px;'>" +
+                "<div style='max-width: 600px; margin: 0 auto;'>" +
+                "<h2 style='color: #2c3e50;'>尊敬的 " + reviewerName + " 教授：</h2>" +
+                "<p>您好！您评审的论文收到了作者的回复：</p>" +
+                "<div style='background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;'>" +
+                "<h3 style='color: #34495e; margin-top: 0;'>" + paper.getTitle() + "</h3>" +
+                "<p style='color: #666;'><strong>回复作者：</strong>" + authorName + "</p>" +
+                "<p style='color: #666;'><strong>回复内容：</strong></p>" +
+                "<p style='color: #555; line-height: 1.6;'>" +
+                (replyContent != null && replyContent.length() > 300 ?
+                        replyContent.substring(0, 300) + "..." :
+                        (replyContent != null ? replyContent : "暂无内容")) +
+                "</p></div>" +
+                "<p>请登录系统查看完整回复并进行回应。</p>" +
+                "<p style='color: #888; font-size: 12px; margin-top: 30px;'>此邮件由系统自动发送，请勿直接回复。</p>" +
+                "</div></body></html>";
+    }
+
     private void sendEmail(String to, String subject, String htmlContent) {
         try {
             MimeMessage message = javaMailSender.createMimeMessage();

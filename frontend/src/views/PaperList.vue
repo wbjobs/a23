@@ -487,7 +487,7 @@ async function handleAssignReviewers() {
       ElMessage.success(`已成功分配 ${selectedReviewers.value.length} 位评审人`)
     } catch (e) {
       console.error('分配API失败，模拟成功', e)
-      ElMessage.success(`已成功分配 ${selectedReviewers.value.length} 位评审人')
+      ElMessage.success(`已成功分配 ${selectedReviewers.value.length} 位评审人`)
     }
     recommendVisible.value = false
     loadPaperList()

@@ -8,11 +8,13 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 @Data
@@ -57,10 +59,26 @@ public class ReviewRecord {
     @Column(name = "review_time")
     private LocalDateTime reviewTime;
 
+    private Boolean anonymous;
+
+    private String reviewerAlias;
+
+    private Boolean authorInfoDesensitized;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
     @Builder.Default
     private ReviewStatus status = ReviewStatus.PENDING;
+
+    @Transient
+    private Long reviewDurationMinutes;
+
+    public Long getReviewDurationMinutes() {
+        if (assignTime != null && reviewTime != null) {
+            return Duration.between(assignTime, reviewTime).toMinutes();
+        }
+        return null;
+    }
 
     public enum ReviewStatus {
         PENDING,

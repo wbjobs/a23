@@ -15,4 +15,10 @@ public interface ReviewerRepository extends Neo4jRepository<Reviewer, Long> {
 
     @Query("MATCH (r:Reviewer), (p:Paper) WHERE id(p) = $paperId RETURN r ORDER BY gds.similarity.cosine(r.vector, p.vector) DESC LIMIT 10")
     List<Reviewer> findReviewersByCosineSimilarity(Long paperId);
+
+    @Query("MATCH (r:Reviewer) WHERE r.averageReviewDurationHours IS NOT NULL RETURN r ORDER BY r.averageReviewDurationHours ASC LIMIT 10")
+    List<Reviewer> findTop10ByReviewSpeed();
+
+    @Query("MATCH (r:Reviewer) WHERE r.scoreDeviation IS NOT NULL RETURN r ORDER BY r.scoreDeviation ASC LIMIT 10")
+    List<Reviewer> findTop10ByScoreConsistency();
 }

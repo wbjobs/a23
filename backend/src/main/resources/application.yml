@@ -61,6 +61,14 @@ app:
   file:
     upload-path: ./uploads/papers
     pdf-base-url: http://localhost:8080/files/papers
+  blind-review:
+    enabled-default: true
+    auto-desensitize: true
+    desensitize-fields:
+      - authors
+      - affiliation
+      - acknowledgements
+    reviewer-alias-pattern: "评审专家%s"
 
 logging:
   level:

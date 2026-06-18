@@ -23,6 +23,10 @@ public class Paper {
     private String innovation;
     private List<String> methods;
 
+    private Boolean blindReviewEnabled;
+
+    private String desensitizedTitle;
+
     @Relationship(type = "AUTHORED_BY", direction = Relationship.Direction.OUTGOING)
     private List<Author> authors;
 

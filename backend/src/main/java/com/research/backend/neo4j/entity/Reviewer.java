@@ -2,6 +2,8 @@ package com.research.backend.neo4j.entity;
 
 import lombok.Data;
 import org.springframework.data.neo4j.core.schema.*;
+
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -16,6 +18,13 @@ public class Reviewer {
     private String affiliation;
     private String title;
     private String researchAreas;
+
+    private Integer totalReviews;
+    private Double averageScore;
+    private Double averageReviewDurationHours;
+    private Double scoreDeviation;
+    private Integer timelyCompletionRate;
+    private LocalDateTime qualityLastCalculated;
 
     @Relationship(type = "EXPERT_IN", direction = Relationship.Direction.OUTGOING)
     private List<Keyword> expertKeywords;
